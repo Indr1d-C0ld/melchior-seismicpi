@@ -62,7 +62,7 @@ export default async function (root) {
     } }, l)));
   const apFields = [
     { path: 'network.ap_ssid', label: 'Nome dell\'Access Point' },
-    { path: 'network.ap_password', label: 'Password dell\'Access Point', help: '8-63 caratteri; vuota = rete aperta (sconsigliato).' },
+    { path: 'network.ap_password', label: 'Password dell\'Access Point', type: 'password', help: '8-63 caratteri. Generata a caso dall\'installazione e mostrata alla fine; qui puoi sostituirla.' },
     { path: 'network.ap_channel', label: 'Canale', type: 'number', min: 1, max: 13, step: 1 },
     { path: 'network.ap_address', label: 'Indirizzo della dashboard in AP', help: 'Collegati all\'AP e apri http://questo-indirizzo' },
     { path: 'network.boot_wait_s', label: 'Attesa di una rete nota all\'avvio', type: 'number', unit: 's' },

@@ -7,19 +7,26 @@ function niceStep(range, target) {
   const n = raw / mag;
   return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
 }
+// Ogni generatore di tacche rifiuta limiti non finiti e si ferma a MAX_TICKS: un asse vuoto o
+// logaritmico con valori ≤ 0 non deve mai trasformarsi in un ciclo infinito.
+const MAX_TICKS = 200;
+const finite = (...v) => v.every(Number.isFinite);
 export function niceTicks(lo, hi, target = 5) {
+  if (!finite(lo, hi)) return [];
   if (!(hi > lo)) return [lo];
   const st = niceStep(hi - lo, target), out = [];
-  for (let v = Math.ceil(lo / st) * st; v <= hi + st * 1e-9; v += st) out.push(+v.toFixed(12));
+  if (!(st > 0)) return [lo];
+  for (let v = Math.ceil(lo / st) * st; v <= hi + st * 1e-9 && out.length < MAX_TICKS; v += st) out.push(+v.toFixed(12));
   return out;
 }
 const TIME_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800];
 function timeTicks(lo, hi, px) {
+  if (!finite(lo, hi) || !(hi > lo)) return { ticks: [], step: 60 };
   const target = Math.max(2, px / 90);
   const st = TIME_STEPS.find((s) => (hi - lo) / s <= target) || 604800;
   const off = st >= 86400 ? new Date().getTimezoneOffset() * -60 : 0;
   const out = [];
-  for (let v = Math.ceil((lo + off) / st) * st - off; v <= hi; v += st) out.push(v);
+  for (let v = Math.ceil((lo + off) / st) * st - off; v <= hi && out.length < MAX_TICKS; v += st) out.push(v);
   return { ticks: out, step: st };
 }
 function fmtTick(v) {
@@ -79,7 +86,12 @@ export class Chart {
       for (const v of this.xs) { if (v == null) continue; if (v < a) a = v; if (v > b) b = v; }
       if (lo == null) lo = a; if (hi == null) hi = b;
     }
-    if (!(hi > lo)) { hi = (lo || 0) + 1; }
+    if (!finite(lo, hi)) {
+      const now = Date.now() / 1000;
+      [lo, hi] = x.type === 'time' ? [now - 60, now] : x.log ? [1, 10] : [0, 1];
+    }
+    if (x.log && !(lo > 0)) lo = hi > 0 ? hi / 1000 : 1;
+    if (!(hi > lo)) { hi = lo + (x.log ? lo * 9 : 1); }
     return [lo, hi];
   }
   _yRange(axis, x0, x1) {
@@ -101,6 +113,7 @@ export class Chart {
     if (cfg.minSpan && hi - lo < cfg.minSpan) { const c = (hi + lo) / 2; lo = c - cfg.minSpan / 2; hi = c + cfg.minSpan / 2; }
     if (cfg.symmetric) { const m = Math.max(Math.abs(lo), Math.abs(hi)) || 1; lo = -m; hi = m; }
     if (cfg.zero) { lo = Math.min(0, lo); hi = Math.max(0, hi); }
+    if (cfg.log && !(lo > 0)) lo = hi > 0 ? hi / 1000 : 0.1;
     if (cfg.log) { lo = Math.pow(10, Math.floor(Math.log10(lo))); hi = Math.pow(10, Math.ceil(Math.log10(hi))); if (hi <= lo) hi = lo * 10; }
     else if (hi === lo) { hi += 1; lo -= 1; }
     else if (!cfg.symmetric) { const pd = (hi - lo) * 0.06; if (cfg.min == null && !cfg.zero) lo -= pd; if (cfg.max == null) hi += pd; }
@@ -287,8 +300,9 @@ export class Chart {
 }
 
 function logTicks(lo, hi) {
+  if (!finite(lo, hi) || !(lo > 0) || !(hi > lo)) return [];
   const out = [];
-  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) out.push(Math.pow(10, e));
+  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)) && out.length < MAX_TICKS; e++) out.push(Math.pow(10, e));
   return out.filter((v) => v >= lo * 0.999 && v <= hi * 1.001);
 }
 

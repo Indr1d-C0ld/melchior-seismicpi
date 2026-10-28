@@ -255,3 +255,17 @@ export function storageGet(k, d) { try { const v = localStorage.getItem('spi.' +
 export function storageSet(k, v) { try { localStorage.setItem('spi.' + k, JSON.stringify(v)); } catch { /* privato */ } }
 
 export function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+// Ciclo di ridisegno adattivo: aspetta almeno il doppio del tempo impiegato dall'ultimo disegno,
+// così un client lento (telefono, tablet, browser headless) non resta mai saturo.
+export function drawLoop(fn, minMs = 100) {
+  let timer = null, stopped = false;
+  const tick = () => {
+    if (stopped) return;
+    const t0 = performance.now();
+    try { fn(); } catch (e) { console.error(e); }
+    timer = setTimeout(tick, Math.max(minMs, 2 * (performance.now() - t0)));
+  };
+  timer = setTimeout(tick, minMs);
+  return () => { stopped = true; clearTimeout(timer); };
+}

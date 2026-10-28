@@ -1,4 +1,4 @@
-import { state, h, card, on, seg, num, accFactor, accUnit, cssVar, fmtAcc, storageGet, storageSet, post, toast, errToast } from '../lib.js';
+import { state, h, card, on, seg, num, accFactor, accUnit, cssVar, fmtAcc, storageGet, storageSet, post, toast, errToast, drawLoop } from '../lib.js';
 import { Chart, drawSpectrogram } from '../charts.js';
 import { LiveBuffer } from '../livebuf.js';
 import * as dsp from '../dsp.js';
@@ -71,9 +71,10 @@ export default async function (root) {
     ctx.stroke(); ctx.globalAlpha = 1;
   }
 
-  let raf = 0, slowT = 0;
-  const loop = (ts) => {
-    raf = requestAnimationFrame(loop);
+  let stopLoop = null, slowT = 0;
+  // ridisegno adattivo (vedi drawLoop): funziona anche con la scheda in background
+  const loop = () => {
+    const ts = performance.now();
     if (opt.paused || !buf.dirty) return;
     buf.dirty = false;
     const v = buf.view(opt.win);
@@ -104,7 +105,7 @@ export default async function (root) {
         h('span', {}, 'Temperatura sensore'), h('span', {}, `${num(state.acq?.temp, 1)} °C`));
     }
   };
-  raf = requestAnimationFrame(loop);
+  stopLoop = drawLoop(loop);
   const off = on((m) => { if (m.t === 'theme') { buildTraces(); } });
-  return () => { cancelAnimationFrame(raf); buf.close(); off(); Object.values(charts).forEach((c) => c.destroy()); ratio.destroy(); spec.destroy(); };
+  return () => { stopLoop(); buf.close(); off(); Object.values(charts).forEach((c) => c.destroy()); ratio.destroy(); spec.destroy(); };
 }

@@ -294,7 +294,7 @@ def patch(cfg: dict, changes: dict) -> dict:
 
 
 SECRET_PATHS = (("alerts", "telegram", "token"), ("web", "password_hash"), ("alerts", "mqtt", "password"),
-                ("alerts", "webhook", "secret"))
+                ("alerts", "webhook", "secret"), ("network", "ap_password"))
 
 
 def redacted(cfg: dict) -> dict:

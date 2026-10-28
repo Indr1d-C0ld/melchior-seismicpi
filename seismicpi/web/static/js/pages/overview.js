@@ -1,4 +1,4 @@
-import { state, get, h, card, on, fmtAcc, fmtAgo, fmtDT, fmtTime, num, mmiBadge, classBadge, accFactor, accUnit, cssVar, fmtDur, fmtBytes } from '../lib.js';
+import { state, get, h, card, on, fmtAcc, fmtAgo, fmtDT, fmtTime, num, mmiBadge, classBadge, accFactor, accUnit, cssVar, fmtDur, fmtBytes, drawLoop } from '../lib.js';
 import { Chart } from '../charts.js';
 import { LiveBuffer } from '../livebuf.js';
 import { Helicorder } from '../helicorder.js';
@@ -73,9 +73,8 @@ export default async function (root) {
       h('div', { class: 'empty' }, state.cfg.station.latitude == null ? 'Imposta la posizione della stazione per vedere i terremoti vicini.' : 'Nessun terremoto negli ultimi 3 giorni nel raggio impostato.'));
   }
 
-  let raf = 0;
+  let stopLoop = null;
   const loop = () => {
-    raf = requestAnimationFrame(loop);
     if (!buf.dirty) return; buf.dirty = false;
     const v = buf.view(win);
     scope.setData(v.t, [v.e, v.n, v.z]);
@@ -85,7 +84,7 @@ export default async function (root) {
     ratio.o.hlines = [{ y: state.acq?.on_ratio || 4, color: cssVar('--bad'), label: 'attacco' }];
     ratio.setData(buf.ratioT.slice(Math.max(0, i0)), [buf.ratio.slice(Math.max(0, i0))]);
   };
-  loop();
+  stopLoop = drawLoop(loop);
   renderTiles();
   const off = on((m) => {
     if (m.t === 'status') renderTiles();
@@ -95,5 +94,5 @@ export default async function (root) {
   const tilesTimer = setInterval(renderTiles, 5000);
   await Promise.all([loadEvents(), loadNoise(), loadCatalog(), heli.load()]).catch((e) => console.error(e));
   heli.startLive(10000);
-  return () => { cancelAnimationFrame(raf); buf.close(); off(); clearInterval(tilesTimer); heli.destroy(); scope.destroy(); ratio.destroy(); noise.destroy(); };
+  return () => { stopLoop(); buf.close(); off(); clearInterval(tilesTimer); heli.destroy(); scope.destroy(); ratio.destroy(); noise.destroy(); };
 }

@@ -41,7 +41,7 @@ export default async function (root) {
       card('Collegamento del sensore', h('div', {}, h('div', { html: WIRING, style: { color: 'var(--text)' } }),
         h('ul', {},
           h('li', {}, h('b', {}, 'VCC → pin 1 (3,3 V)'), ' · ', h('b', {}, 'GND → pin 6'), ' · ', h('b', {}, 'SCL → pin 5'), ' · ', h('b', {}, 'SDA → pin 3'), '. INT → pin 7 è facoltativo (il software legge la FIFO a intervalli).'),
-          h('li', {}, 'Nella foto del vecchio montaggio il connettore a 4 vie sul GY-521 sembrava spostato di un pin (SDA libero, un filo su XCL): ricontrolla che ogni filo sia sul pin giusto.'),
+          h('li', {}, 'Errore frequente: un connettore Dupont a più vie infilato spostato di una posizione (SDA libero, un filo su XCL). Controlla filo per filo con la serigrafia del modulo.'),
           h('li', {}, 'Lascia XDA/XCL scollegati. AD0 libero o a GND = indirizzo 0x68.'),
           h('li', {}, 'Verifica in Sensore → Scansione bus I2C: deve comparire 0x68.')))),
       card('Installazione meccanica (conta più del software)', h('ul', {},

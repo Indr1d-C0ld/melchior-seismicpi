@@ -237,7 +237,8 @@ def adapter_info(iface: str) -> dict:
 
 
 def hostname() -> str:
-    return os.uname().nodename
+    # SEISMICPI_HOSTNAME: nome mostrato al posto di quello reale (demo, screenshot)
+    return os.environ.get("SEISMICPI_HOSTNAME") or os.uname().nodename
 
 
 # ------------------------------------------------------------------ stato condiviso con netwatch

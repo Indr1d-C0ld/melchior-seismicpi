@@ -2,7 +2,7 @@
 # SeismicPi – installazione completa e idempotente su Raspberry Pi OS Lite (32 bit, Bookworm o Trixie).
 #
 #   sudo ./install.sh [--dest /opt/seismicpi] [--user admin] [--hostname seismicpi] [--country IT]
-#                     [--rtc] [--sim] [--no-sd-protect] [--no-password]
+#                     [--ap-password PW] [--rtc] [--sim] [--no-sd-protect] [--no-password]
 #
 # Passi:
 #   1. pacchetti Debian (python3-aiohttp, smbus2, i2c-tools, NetworkManager, …)
@@ -11,7 +11,8 @@
 #   4. permessi (polkit) per Wi-Fi, ora, riavvio e servizi propri
 #   5. protezione della SD (journal in RAM, /tmp in RAM, niente swap su SD, noatime, timer apt off)
 #   6. servizi systemd: acquisizione, dashboard (porta 80), guardiano Wi-Fi/Access Point
-#   7. utente e password della dashboard (chiesti a video, salvati solo come hash)
+#   7. utente e password della dashboard (chiesti a video, salvati solo come hash) e password
+#      casuale dell'Access Point di emergenza (diversa per ogni Raspberry)
 #
 # Rilanciarlo aggiorna il codice e riavvia i servizi senza toccare dati e configurazione.
 set -euo pipefail
@@ -22,6 +23,7 @@ DATA=/var/lib/seismicpi
 ADMIN_USER=admin
 HOSTNAME_NEW=""
 COUNTRY=IT
+AP_PW=""
 DO_RTC=0 DO_SIM=0 DO_SD=1 DO_PW=1
 
 while [ $# -gt 0 ]; do
@@ -30,11 +32,12 @@ while [ $# -gt 0 ]; do
     --user) ADMIN_USER=$2; shift ;;
     --hostname) HOSTNAME_NEW=$2; shift ;;
     --country) COUNTRY=$2; shift ;;
+    --ap-password) AP_PW=$2; shift ;;
     --rtc) DO_RTC=1 ;;
     --sim) DO_SIM=1 ;;
     --no-sd-protect) DO_SD=0 ;;
     --no-password) DO_PW=0 ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "opzione sconosciuta: $1" >&2; exit 2 ;;
   esac
   shift
@@ -189,6 +192,17 @@ from seismicpi import config; print(1 if config.load()['web']['password_hash'] e
   systemctl restart seismicpi-web
 fi
 
+# ---------------------------------------------------------------- password dell'Access Point
+step "Access Point di emergenza"
+admin_cmd() { sudo -u seismic env SEISMICPI_DATA="$DATA" PYTHONPATH="$DEST" python3 -m seismicpi.admin "$@"; }
+if [ -n "$AP_PW" ]; then
+  AP_SHOWN=$(printf '%s\n' "$AP_PW" | admin_cmd set-ap-password --stdin)
+else
+  AP_SHOWN=$(admin_cmd set-ap-password --random --if-default)   # casuale solo alla prima installazione
+fi
+AP_SSID=$(admin_cmd show-config | python3 -c "import json,sys; print(json.load(sys.stdin)['network']['ap_ssid'])")
+systemctl restart seismicpi-netwatch
+
 # ---------------------------------------------------------------- riepilogo
 step "Verifiche"
 if command -v i2cdetect >/dev/null && [ -e /dev/i2c-1 ]; then
@@ -208,6 +222,7 @@ for s in seismicpi-acq seismicpi-web seismicpi-netwatch; do note "$s: $(systemct
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo
 echo "Dashboard: http://$(hostname).local  oppure  http://${IP:-<indirizzo-del-pi>}"
-echo "Se il Pi non trova reti note crea il Wi-Fi 'SeismicPi' (password: sismografo) → http://192.168.4.1"
+echo "Se il Pi non trova reti note crea il Wi-Fi '$AP_SSID' con password: $AP_SHOWN → http://192.168.4.1"
+echo "(annotala: si cambia dalla dashboard, Rete → Access Point di emergenza)"
 [ $IS_PI -eq 1 ] && ! [ -e /dev/i2c-1 ] && echo "Riavvia il Pi per attivare I2C: sudo reboot"
 exit 0

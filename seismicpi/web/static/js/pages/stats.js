@@ -68,7 +68,7 @@ export default async function (root) {
       const n1 = mkChart({ height: 240, x: { type: 'time' }, y: yA, zoom: true, series: [
         { name: 'RMS E', color: cssVar('--e') }, { name: 'RMS N', color: cssVar('--n') }, { name: 'RMS Z', color: cssVar('--z') }, { name: 'RMS 3D', color: cssVar('--v'), width: 2 }] });
       n1.setData(T, [rows.map((r) => r.rms_e), rows.map((r) => r.rms_n), rows.map((r) => r.rms_z), rows.map((r) => r.rms_v)]);
-      const n2 = mkChart({ height: 200, x: { type: 'time' }, y: { ...yA, log: true }, zoom: true, series: [
+      const n2 = mkChart({ height: 200, x: { type: 'time' }, y: { label: accUnit(), fmt: fmtA, log: true }, zoom: true, series: [
         { name: 'RMS min', color: cssVar('--ok') }, { name: 'RMS max', color: cssVar('--warn') }, { name: 'picco', color: cssVar('--bad') }] });
       n2.setData(T, [rows.map((r) => r.rms_v_min), rows.map((r) => r.rms_v_max), rows.map((r) => r.peak_v)]);
       const sr = mkChart({ height: 180, x: { type: 'time' }, y: { label: 'Hz', tipFmt: (v) => num(v, 4) }, series: [{ name: 'frequenza misurata', color: cssVar('--accent') }] });

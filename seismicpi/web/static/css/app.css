@@ -17,7 +17,7 @@
   --grid: rgba(91,103,128,.15);
   color-scheme: light;
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; scrollbar-color: var(--line2) transparent; scrollbar-width: thin; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
 a { color: var(--accent); text-decoration: none; }

@@ -1,4 +1,4 @@
-import { state, h, card, configForm, on, num, fmtAcc, cssVar, accUnit } from '../lib.js';
+import { state, h, card, configForm, on, num, fmtAcc, cssVar, accUnit, drawLoop } from '../lib.js';
 import { Chart } from '../charts.js';
 import { LiveBuffer } from '../livebuf.js';
 
@@ -47,9 +47,8 @@ export default async function (root) {
       card('Come funziona', h('div', { class: 'muted' },
         h('p', {}, 'STA/LTA confronta l\'energia del segnale negli ultimi istanti (STA) con quella del rumore di fondo (LTA). Un terremoto fa crescere improvvisamente STA: quando il rapporto supera la soglia di attacco nasce un evento, che termina quando scende sotto la soglia di stacco.'),
         h('p', {}, 'Ogni evento viene poi classificato (impulso locale, rumore locale, possibile sisma) in base a durata, frequenza dominante e rapporto orizzontale/verticale, e confrontato con i cataloghi INGV/EMSC per la conferma.'))))));
-  let raf;
+  let stopLoop = null;
   const loop = () => {
-    raf = requestAnimationFrame(loop);
     if (!buf.dirty) return; buf.dirty = false;
     const t = buf.ratioT;
     ratio.o.hlines = [{ y: state.cfg.trigger.on_ratio, color: cssVar('--bad'), label: 'attacco' }, { y: state.cfg.trigger.off_ratio, color: cssVar('--warn'), label: 'stacco' }];
@@ -58,6 +57,6 @@ export default async function (root) {
     info.replaceChildren(h('span', {}, 'STA / LTA'), h('span', {}, `${fmtAcc(a.sta_mg)} / ${fmtAcc(a.lta_mg)} RMS`), h('span', {}, 'Rapporto attuale'), h('span', {}, num(a.ratio, 2)),
       h('span', {}, 'Stato'), h('span', {}, a.state === 'idle' ? 'in ascolto' : 'EVENTO in corso'), h('span', {}, 'Trigger registrati'), h('span', {}, `${a.counters?.triggers || 0} (scartati ${a.counters?.discarded || 0})`));
   };
-  loop();
-  return () => { cancelAnimationFrame(raf); buf.close(); ratio.destroy(); };
+  stopLoop = drawLoop(loop);
+  return () => { stopLoop(); buf.close(); ratio.destroy(); };
 }
