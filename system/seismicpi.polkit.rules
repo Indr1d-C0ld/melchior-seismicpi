@@ -1,0 +1,17 @@
+// /etc/polkit-1/rules.d/50-seismicpi.rules
+// L'utente di servizio "seismic" può gestire il Wi-Fi, riavviare/spegnere il Pi, impostare l'ora
+// e riavviare solo i propri servizi. Nient'altro.
+polkit.addRule(function (action, subject) {
+    if (subject.user != "seismic") return polkit.Result.NOT_HANDLED;
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) return polkit.Result.YES;
+    if (action.id == "org.freedesktop.login1.reboot" || action.id == "org.freedesktop.login1.reboot-multiple-sessions" ||
+        action.id == "org.freedesktop.login1.power-off" || action.id == "org.freedesktop.login1.power-off-multiple-sessions")
+        return polkit.Result.YES;
+    if (action.id == "org.freedesktop.timedate1.set-time" || action.id == "org.freedesktop.timedate1.set-ntp")
+        return polkit.Result.YES;
+    if (action.id == "org.freedesktop.systemd1.manage-units") {
+        var unit = action.lookup("unit");
+        if (unit && unit.indexOf("seismicpi-") == 0) return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

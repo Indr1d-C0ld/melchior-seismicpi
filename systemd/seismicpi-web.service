@@ -1,0 +1,20 @@
+[Unit]
+Description=SeismicPi – dashboard web, allerte e cataloghi
+After=network.target seismicpi-acq.service
+Wants=seismicpi-acq.service
+
+[Service]
+Type=simple
+User=seismic
+Group=seismic
+SupplementaryGroups=gpio i2c systemd-journal netdev
+WorkingDirectory=/opt/seismicpi
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m seismicpi.web
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

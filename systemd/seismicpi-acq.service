@@ -1,0 +1,23 @@
+[Unit]
+Description=SeismicPi – acquisizione sismica (MPU-6050)
+After=local-fs.target time-sync.target
+Wants=time-sync.target
+
+[Service]
+Type=simple
+User=seismic
+Group=seismic
+SupplementaryGroups=i2c gpio
+WorkingDirectory=/opt/seismicpi
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m seismicpi.acquisition
+Restart=always
+RestartSec=5
+# priorità alta: la FIFO del sensore tiene solo 1,7 s di dati
+Nice=-10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+# /etc/tmpfiles.d/seismicpi.conf – cartelle in RAM per socket, stato e dati grezzi
+d /run/seismicpi 0770 seismic seismic -
+d /dev/shm/seismicpi 0750 seismic seismic -
