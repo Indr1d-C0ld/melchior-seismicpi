@@ -10,6 +10,9 @@ Group=seismic
 SupplementaryGroups=gpio i2c systemd-journal netdev
 WorkingDirectory=/opt/seismicpi
 Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+# LED di stato (overlay gpio-led): il kernel crea i file di controllo di proprietà di root;
+# il "+" esegue questo passo con privilegi pieni e dà al gruppo gpio il permesso di scrittura
+ExecStartPre=+/bin/sh -c 'for f in /sys/class/leds/seismicpi/brightness /sys/class/leds/seismicpi/trigger; do [ -e "$f" ] && chgrp gpio "$f" && chmod g+w "$f"; done; true'
 ExecStart=/usr/bin/python3 -m seismicpi.web
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=always

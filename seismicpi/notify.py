@@ -402,6 +402,7 @@ class Notifier:
             log.info("limite allerte orarie raggiunto: evento #%s non notificato", e["id"])
             return
         self.dispatch("event", self.event_text(e), event=e, image=e["id"])
+        self.led_alert(mmi)
         self.con.execute("UPDATE events SET notified=1 WHERE id=?", (e["id"],))
         g = self.cfg["alerts"]["gpio"]
         if g["enabled"] and mmi >= g["min_mmi"]:
@@ -424,6 +425,7 @@ class Notifier:
         key = ev["t_trigger"]
         if mmi >= max(4.0, self.cfg["alerts"]["rules"]["quiet_override_mmi"]) and key not in self.early_sent:
             self.early_sent.add(key)
+            self.led_alert(mmi)
             if self._can_alert(mmi):
                 self.dispatch("early", f"🚨 <b>Scossa in corso!</b>\n{fmt_time(key)} · PGA {ev['pga']:.1f} mg · "
                                        f"intensità stimata {dsp.mmi_roman(mmi)}\nSeguirà il resoconto completo.")
@@ -485,10 +487,19 @@ class Notifier:
         self.mqtt_publish(kind, payload_wh)
         self.app["hub"].broadcast({"t": "alert", "kind": kind, "text": _strip_html(text)})
 
+    def led_alert(self, mmi):
+        """Lampeggio rapido del LED di stato per le scosse forti (anche con le allerte sospese:
+        è una spia locale, non disturba nessuno)."""
+        led = self.app.get("led")
+        if led and mmi >= self.cfg["led"]["alert_min_mmi"]:
+            led.flash_alert()
+
     # ============================================================ GPIO
     async def gpio_pulse(self, seconds=None):
         g = self.cfg["alerts"]["gpio"]
         pin = int(g["pin"])
+        if self.cfg["led"]["enabled"] and pin == int(self.cfg["led"]["gpio"]):
+            raise RuntimeError(f"GPIO{pin} è già usato dal LED di stato: scegli un altro pin (es. 27)")
         on, off = ("dh", "dl") if g["active_high"] else ("dl", "dh")
         if not shutil.which("pinctrl"):
             raise RuntimeError("comando pinctrl non disponibile")

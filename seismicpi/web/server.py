@@ -26,6 +26,7 @@ import aiohttp
 from aiohttp import web
 
 from .. import VERSION, analysis, catalogs, config, db, dsp, ipc, miniseed, netmgr, storage, sysinfo
+from ..led import PATTERN_NAMES, LedController
 from ..notify import Notifier
 
 log = logging.getLogger("seismicpi.web")
@@ -235,7 +236,7 @@ async def status(request):
         "alerts": {"muted_until": app["cfg"]["alerts"]["muted_until"], "telegram_ok": n.tg_ok,
                    "telegram_error": n.tg_error, "mqtt_error": n.mqtt_error,
                    "telegram_bot": (n.tg_bot or {}).get("username")},
-        "catalog": app["catalog_status"],
+        "catalog": app["catalog_status"], "led": app["led"].status(),
         "events_24h": c[0], "max_pga_24h": c[1], "last_event": dict(last) if last else None,
     })
 
@@ -927,6 +928,27 @@ async def outbox_clear(request):
     return J({"ok": True})
 
 
+# ======================================================================== LED di stato
+
+@routes.get("/api/led")
+async def led_info(request):
+    return J({**request.app["led"].status(), "patterns": PATTERN_NAMES})
+
+
+@routes.post("/api/led/test")
+@admin
+async def led_test(request):
+    b = await request.json()
+    led = request.app["led"]
+    pat = b.get("pattern", "alert")
+    if pat not in ("ok", "event", "error", "ap", "alert", "warmup"):
+        return err("motivo sconosciuto")
+    if not led.available:
+        return err("LED non presente: manca l'overlay gpio-led (rilancia install.sh e riavvia)")
+    led.start_test(pat, float(b.get("seconds", 6)))
+    return J({"ok": True})
+
+
 # ======================================================================== rete
 
 def _net(fn, *a):
@@ -1384,6 +1406,7 @@ def build_app() -> web.Application:
     app["ro_con"] = ro_con
     app["acq"] = ipc.Client(config.IPC_PATH, lambda m: on_acq_message(app, m))
     app["notifier"] = Notifier(app)
+    app["led"] = LedController(app)
     watcher = config.ConfigWatcher()
 
     async def after_change(old, new):
@@ -1448,9 +1471,11 @@ def build_app() -> web.Application:
         loop = asyncio.get_running_loop()
         app["tasks"] = [loop.create_task(c) for c in (
             app["acq"].run(), n.outbox_loop(), n.tg_loop(), n.daily_loop(), catalog_loop(app), sys_loop(app),
+            app["led"].run(),
             watch_config())]
 
     async def cleanup(app):
+        app["led"].shutdown()
         for t in app["tasks"]:
             t.cancel()
         await app["notifier"].session.close()

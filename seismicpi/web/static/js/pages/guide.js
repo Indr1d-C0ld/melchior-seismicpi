@@ -1,8 +1,8 @@
 import { state, h, card, mmiBadge } from '../lib.js';
 
 const WIRING = `
-<svg viewBox="0 0 640 300" class="wiring" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif" font-size="12">
-  <rect x="20" y="30" width="250" height="240" rx="12" fill="#14532d" stroke="#22c55e"/>
+<svg viewBox="0 0 640 320" class="wiring" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif" font-size="12">
+  <rect x="20" y="30" width="250" height="270" rx="12" fill="#14532d" stroke="#22c55e"/>
   <text x="145" y="22" text-anchor="middle" fill="currentColor" font-weight="600">Raspberry Pi Zero – header GPIO (vista dall'alto)</text>
   <g font-size="11">
     <circle cx="200" cy="60" r="9" fill="#ef4444"/><text x="190" y="64" text-anchor="end" fill="#fff">1 · 3V3</text>
@@ -14,9 +14,12 @@ const WIRING = `
     <circle cx="200" cy="144" r="9" fill="#f59e0b"/><text x="190" y="148" text-anchor="end" fill="#fff">7 · GPIO4 (INT, facolt.)</text>
     <circle cx="228" cy="144" r="9" fill="#374151"/>
     <circle cx="200" cy="172" r="9" fill="#374151"/><circle cx="228" cy="172" r="9" fill="#374151"/>
-    <circle cx="200" cy="200" r="9" fill="#22d3ee"/><text x="190" y="204" text-anchor="end" fill="#fff">11 · GPIO17 (cicalino)</text>
+    <circle cx="200" cy="200" r="9" fill="#22c55e" stroke="#fff"/><text x="190" y="204" text-anchor="end" fill="#fff">11 · GPIO17 (LED di stato)</text>
     <circle cx="228" cy="200" r="9" fill="#374151"/>
-    <text x="145" y="250" text-anchor="middle" fill="#bbf7d0">il pin 1 è quello vicino alla microSD</text>
+    <circle cx="200" cy="228" r="9" fill="#22d3ee"/><text x="190" y="232" text-anchor="end" fill="#fff">13 · GPIO27 (cicalino, facolt.)</text>
+    <circle cx="228" cy="228" r="9" fill="#374151"/>
+    <circle cx="200" cy="256" r="9" fill="#374151"/><circle cx="228" cy="256" r="9" fill="#111827" stroke="#fff"/><text x="242" y="260" fill="#fff">20 · GND</text>
+    <text x="145" y="290" text-anchor="middle" fill="#bbf7d0">il pin 1 è quello vicino alla microSD</text>
   </g>
   <rect x="440" y="50" width="170" height="210" rx="10" fill="#1d4ed8" stroke="#93c5fd"/>
   <text x="525" y="42" text-anchor="middle" fill="currentColor" font-weight="600">GY-521 (MPU-6050)</text>
@@ -51,6 +54,7 @@ export default async function (root) {
         h('li', {}, 'Allinea un lato del box al nord (o indica la rotazione in Stazione) per interpretare il moto della particella.'),
         h('li', {}, 'Accorcia i cavi o fissali al box: un cavo che oscilla è un microfono.'),
         h('li', {}, 'Usa un alimentatore stabile da almeno 2,5 A: la sottotensione corrompe la SD e aggiunge rumore.'),
+        h('li', {}, 'LED di stato: anodo (+) sul GPIO17 (pin 11) con una resistenza da 220-330 Ω in serie, catodo (−) su un GND (es. pin 20 o 14). Il significato dei lampeggi è in Allerte → LED di stato.'),
         h('li', {}, 'Opzionale: modulo RTC DS3231 sullo stesso bus I2C (pin 1, 3, 5, 6) per avere l\'ora esatta anche senza Internet; l\'installatore lo abilita con --rtc.')))),
     h('div', { class: 'grid g2' },
       card('Come leggere gli eventi', h('div', {},

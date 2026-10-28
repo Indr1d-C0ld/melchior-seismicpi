@@ -2,6 +2,7 @@
 
     python3 -m seismicpi.admin set-password [--user admin]   # chiede la password (o la legge da stdin)
     python3 -m seismicpi.admin set-ap-password [--random | --stdin] [--if-default]
+    python3 -m seismicpi.admin set led.gpio=17 led.mode=status     # valori JSON o testo
     python3 -m seismicpi.admin show-config
 """
 from __future__ import annotations
@@ -25,11 +26,32 @@ def main():
     sa.add_argument("--random", action="store_true", help="genera una password casuale e la stampa")
     sa.add_argument("--stdin", action="store_true", help="legge la password da stdin")
     sa.add_argument("--if-default", action="store_true", help="agisce solo se è ancora quella predefinita")
+    ss = sub.add_parser("set", help="imposta valori della configurazione (chiave.puntata=valore)")
+    ss.add_argument("pairs", nargs="+")
     sub.add_parser("show-config", help="stampa la configurazione senza segreti")
     a = ap.parse_args()
     cfg = config.load()
     if a.cmd == "show-config":
         print(json.dumps(config.redacted(cfg), indent=2, ensure_ascii=False))
+        return
+    if a.cmd == "set":
+        changes: dict = {}
+        for pair in a.pairs:
+            key, _, raw = pair.partition("=")
+            try:
+                val = json.loads(raw)
+            except ValueError:
+                val = raw
+            node = changes
+            *path, last = key.split(".")
+            for k in path:
+                node = node.setdefault(k, {})
+            node[last] = val
+        try:
+            config.save(config.patch(cfg, changes))
+        except config.ConfigError as e:
+            sys.exit(str(e))
+        print("ok")
         return
     if a.cmd == "set-ap-password":
         if a.if_default and cfg["network"]["ap_password"] != config.DEFAULTS["network"]["ap_password"]:

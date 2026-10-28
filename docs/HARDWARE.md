@@ -10,7 +10,8 @@
 | Alimentatore 5 V stabile, almeno 2,5 A | la sottotensione corrompe la SD e aggiunge rumore |
 | microSD da 8 GB in su | meglio se di tipo "endurance" |
 | (facoltativo) RTC DS3231 | ora esatta anche senza Internet; si collega allo stesso bus I2C (`install.sh --rtc`) |
-| (facoltativo) cicalino, LED o relè | sul GPIO17 (pin 11), attivato dalle allerte forti |
+| LED di stato + resistenza 220-330 Ω | anodo sul GPIO17 (pin 11), catodo su GND (es. pin 20). Vedi [LED di stato](#led-di-stato) |
+| (facoltativo) cicalino o relè | sul GPIO27 (pin 13), attivato dalle allerte forti |
 
 ## Collegamento GY-521 → Raspberry Pi
 
@@ -37,6 +38,42 @@ Scansione bus I2C*.
 Il prototipo del progetto aveva proprio questo problema:
 [foto del montaggio originale](../pre_assets/photo_2026-10-28_11-11-16.jpg) (Pi Zero, GY-521 e
 cavi Dupont in un box).
+
+## LED di stato
+
+Un LED collegato al **GPIO17 (pin 11)**, con una **resistenza da 220-330 Ω in serie**, verso
+**GND** (per esempio pin 20 o 14), mostra lo stato del sismografo anche con il box chiuso.
+Senza resistenza il LED assorbe troppa corrente e può danneggiare il GPIO.
+
+| Lampeggio | Significato |
+|---|---|
+| acceso fisso dall'accensione | il sistema si sta avviando: il kernel accende il LED, poi lo comanda il sismografo |
+| breve lampo ogni 2 s | acquisizione regolare |
+| lampeggio lento regolare | avvio del trigger (calcolo del rumore di fondo) |
+| acceso fisso | evento in corso |
+| lampeggio veloce | sensore assente o acquisizione ferma |
+| doppio lampo | modalità Access Point (nessuna rete nota) |
+| lampeggio rapidissimo per 15 s | allerta forte (intensità stimata ≥ III, configurabile) |
+| spento | dashboard ferma, sistema spento o LED disattivato |
+
+Il pin è gestito dal kernel tramite l'overlay `gpio-led`, che `install.sh` aggiunge a
+`config.txt`:
+
+```
+dtoverlay=gpio-led,gpio=17,label=seismicpi,trigger=default-on
+```
+
+Il software scrive solo acceso o spento in `/sys/class/leds/seismicpi`. Dalla dashboard
+(*Allerte → LED di stato*) si sceglie cosa mostrare e si provano i lampeggi:
+
+- stato del sismografo;
+- attività della microSD;
+- battito del kernel;
+- sempre acceso;
+- spento.
+
+Per usare un altro pin rilancia `sudo ./install.sh --led-gpio N` e riavvia. Senza LED usa
+`--no-led`.
 
 ## Montaggio meccanico
 

@@ -70,9 +70,9 @@ export default async function (root) {
     { path: 'alerts.mqtt.username', label: 'Utente' }, { path: 'alerts.mqtt.password', label: 'Password', type: 'password' },
     { path: 'alerts.mqtt.topic', label: 'Topic base' },
     { path: 'alerts.mqtt.homeassistant_discovery', label: 'Autoconfigurazione Home Assistant', type: 'check' },
-    { section: 'Uscita GPIO (cicalino, LED, relè)' },
+    { section: 'Uscita GPIO (cicalino o relè)' },
     { path: 'alerts.gpio.enabled', label: 'Uscita GPIO attiva', type: 'check' },
-    { path: 'alerts.gpio.pin', label: 'GPIO (numerazione BCM)', type: 'number', min: 2, max: 27, step: 1 },
+    { path: 'alerts.gpio.pin', label: 'GPIO (numerazione BCM)', type: 'number', min: 2, max: 27, step: 1, help: 'Default GPIO27 (pin 13). Non usare il pin del LED di stato.' },
     { path: 'alerts.gpio.active_high', label: 'Attivo alto', type: 'check' },
     { path: 'alerts.gpio.min_mmi', label: 'Da intensità', type: 'number', step: 0.5 },
     { path: 'alerts.gpio.duration_s', label: 'Durata', type: 'number', unit: 's' },
@@ -95,5 +95,33 @@ export default async function (root) {
       card('Altri canali', configForm(otherFields, { extraActions: [test('webhook'), test('mqtt'), test('gpio')] })),
       card('Storico notifiche', h('div', {}, hist, state.admin ? h('div', { class: 'row end', style: { marginTop: '8px' } }, h('button', { class: 'small', onclick: async () => { await post('/api/alerts/outbox/clear'); loadHist(); } }, 'Svuota coda non inviata')) : null))),
     h('p', { class: 'muted' }, 'Senza Internet (modalità Access Point) le notifiche restano in coda e partono appena il Pi torna in rete. MQTT richiede il pacchetto python3-paho-mqtt.')));
-  await loadHist();
+  // ---------------------------------------------------------------- LED di stato
+  const ledInfo = h('div');
+  const loadLed = async () => {
+    try {
+      const l = await get('/api/led');
+      ledInfo.replaceChildren(l.available
+        ? h('div', { class: 'note ok' }, `LED su GPIO${l.gpio} · ora: `, h('b', {}, l.enabled ? (l.pattern_name || '–') : 'disattivato'), l.error ? ` · errore: ${l.error}` : '')
+        : h('div', { class: 'note warn' }, `LED non rilevato (${l.path}). Sul Raspberry serve l'overlay gpio-led, che install.sh aggiunge a config.txt: rilancia l'installazione e riavvia.`));
+    } catch (e) { ledInfo.replaceChildren(h('div', { class: 'note bad' }, e.message)); }
+  };
+  const ledTest = (pat, label) => h('button', { class: 'small', disabled: !state.admin, onclick: async () => {
+    try { await post('/api/led/test', { pattern: pat, seconds: 6 }); toast(`LED: ${label} per 6 secondi`, 'ok'); setTimeout(loadLed, 300); } catch (e) { errToast(e); }
+  } }, label);
+  const ledFields = [
+    { path: 'led.enabled', label: 'LED di stato attivo', type: 'check' },
+    { path: 'led.mode', label: 'Cosa mostra', type: 'select', options: [['status', 'stato del sismografo (consigliato)'], ['disk', 'attività della microSD'], ['heartbeat', 'battito del kernel'], ['on', 'sempre acceso'], ['off', 'spento']] },
+    { path: 'led.alert_min_mmi', label: 'Lampeggio di allerta da intensità', type: 'number', step: 0.5, min: 1, max: 10, help: 'Funziona anche con le allerte sospese e senza Internet.' },
+    { path: 'led.alert_seconds', label: 'Durata del lampeggio di allerta', type: 'number', unit: 's', min: 1, max: 600 },
+  ];
+  const legend = h('table', {}, h('tbody', {}, [
+    ['battito lento (lampo ogni 2 s)', 'acquisizione regolare'], ['acceso fisso', 'evento in corso'], ['lampeggio lento regolare', 'avvio, calcolo del rumore di fondo'],
+    ['lampeggio veloce', 'sensore assente o acquisizione ferma'], ['doppio lampo', 'modalità Access Point'], ['lampeggio rapidissimo', 'allerta forte'],
+  ].map(([a, b]) => h('tr', {}, h('td', { class: 'wrap' }, a), h('td', { class: 'wrap muted' }, b)))));
+  root.querySelector('.stack').append(card('LED di stato', h('div', { class: 'grid g2' },
+    h('div', { class: 'stack' }, ledInfo, configForm(ledFields, { onsave: () => setTimeout(loadLed, 1500) })),
+    h('div', { class: 'stack' }, h('div', { class: 'muted' }, 'Significato dei lampeggi in modalità "stato":'), legend,
+      h('div', { class: 'row' }, h('span', { class: 'muted' }, 'Prova:'), ledTest('ok', 'regolare'), ledTest('event', 'evento'), ledTest('warmup', 'avvio'),
+        ledTest('error', 'errore'), ledTest('ap', 'Access Point'), ledTest('alert', 'allerta'))))));
+  await Promise.all([loadHist(), loadLed()]);
 }

@@ -114,8 +114,16 @@ DEFAULTS: dict = {
         "webhook": {"enabled": False, "url": "", "secret": ""},
         "mqtt": {"enabled": False, "host": "", "port": 1883, "username": "", "password": "",
                  "topic": "seismicpi", "homeassistant_discovery": True},
-        "gpio": {"enabled": False, "pin": 17, "active_high": True, "min_mmi": 3.0, "duration_s": 5},
+        # uscita per cicalino/relè: GPIO27 (pin 13), perché GPIO17 è il LED di stato
+        "gpio": {"enabled": False, "pin": 27, "active_high": True, "min_mmi": 3.0, "duration_s": 5},
         "muted_until": 0,
+    },
+    "led": {
+        "enabled": True,
+        "gpio": 17,                # solo informativo: il pin si sceglie in installazione (overlay gpio-led)
+        "mode": "status",          # status | disk | heartbeat | on | off
+        "alert_min_mmi": 3.0,      # da questa intensità stimata il LED lampeggia rapido
+        "alert_seconds": 15,
     },
     "catalogs": {
         "enabled": True,
@@ -252,6 +260,11 @@ def validate(cfg: dict) -> dict:
     _num(cfg, "network.ap_channel", 1, 13, True)
     tg = cfg["alerts"]["telegram"]
     tg["chat_ids"] = [str(c).strip() for c in tg["chat_ids"] if str(c).strip()]
+    if cfg["led"]["mode"] not in ("status", "disk", "heartbeat", "on", "off"):
+        raise ConfigError("led.mode: status, disk, heartbeat, on oppure off")
+    _num(cfg, "led.alert_min_mmi", 1, 10)
+    _num(cfg, "led.alert_seconds", 1, 600, True)
+    _num(cfg, "alerts.gpio.pin", 2, 27, True)
     if cfg["web"]["units"] not in ("mg", "gal", "ms2"):
         raise ConfigError("web.units: mg, gal o ms2")
     return cfg

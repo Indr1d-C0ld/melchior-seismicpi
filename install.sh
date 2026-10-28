@@ -2,11 +2,12 @@
 # SeismicPi – installazione completa e idempotente su Raspberry Pi OS Lite (32 bit, Bookworm o Trixie).
 #
 #   sudo ./install.sh [--dest /opt/seismicpi] [--user admin] [--hostname seismicpi] [--country IT]
-#                     [--ap-password PW] [--rtc] [--sim] [--no-sd-protect] [--no-password]
+#                     [--ap-password PW] [--led-gpio 17 | --no-led] [--rtc] [--sim] [--no-sd-protect]
+#                     [--no-password]
 #
 # Passi:
 #   1. pacchetti Debian (python3-aiohttp, smbus2, i2c-tools, NetworkManager, …)
-#   2. bus I2C abilitato (400 kHz) ed eventuale modulo RTC DS3231 (--rtc)
+#   2. bus I2C abilitato (400 kHz), LED di stato sul GPIO17 (overlay gpio-led) ed eventuale RTC DS3231
 #   3. utente di servizio "seismic", codice in /opt/seismicpi, dati in /var/lib/seismicpi
 #   4. permessi (polkit) per Wi-Fi, ora, riavvio e servizi propri
 #   5. protezione della SD (journal in RAM, /tmp in RAM, niente swap su SD, noatime, timer apt off)
@@ -24,6 +25,7 @@ ADMIN_USER=admin
 HOSTNAME_NEW=""
 COUNTRY=IT
 AP_PW=""
+LED_GPIO=17
 DO_RTC=0 DO_SIM=0 DO_SD=1 DO_PW=1
 
 while [ $# -gt 0 ]; do
@@ -33,11 +35,13 @@ while [ $# -gt 0 ]; do
     --hostname) HOSTNAME_NEW=$2; shift ;;
     --country) COUNTRY=$2; shift ;;
     --ap-password) AP_PW=$2; shift ;;
+    --led-gpio) LED_GPIO=$2; shift ;;
+    --no-led) LED_GPIO="" ;;
     --rtc) DO_RTC=1 ;;
     --sim) DO_SIM=1 ;;
     --no-sd-protect) DO_SD=0 ;;
     --no-password) DO_PW=0 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "opzione sconosciuta: $1" >&2; exit 2 ;;
   esac
   shift
@@ -69,6 +73,12 @@ if [ $IS_PI -eq 1 ]; then
   grep -q '^dtparam=i2c_arm_baudrate=' "$BOOTCFG" || echo 'dtparam=i2c_arm_baudrate=400000' >> "$BOOTCFG"
   grep -q '^i2c-dev' /etc/modules 2>/dev/null || echo 'i2c-dev' >> /etc/modules
   modprobe i2c-dev 2>/dev/null || true
+  # LED di stato: il kernel gestisce il pin (overlay gpio-led), il software scrive solo on/off
+  sed -i '/^dtoverlay=gpio-led,.*label=seismicpi/d' "$BOOTCFG"
+  if [ -n "$LED_GPIO" ]; then
+    echo "dtoverlay=gpio-led,gpio=$LED_GPIO,label=seismicpi,trigger=default-on" >> "$BOOTCFG"
+    note "LED di stato su GPIO$LED_GPIO (si accende al boot, poi lo comanda il sismografo)"
+  fi
   if [ $DO_RTC -eq 1 ]; then
     grep -q 'dtoverlay=i2c-rtc,ds3231' "$BOOTCFG" || echo 'dtoverlay=i2c-rtc,ds3231' >> "$BOOTCFG"
     note "RTC DS3231 abilitato (attivo dopo il riavvio)"
@@ -199,6 +209,11 @@ if [ -n "$AP_PW" ]; then
   AP_SHOWN=$(printf '%s\n' "$AP_PW" | admin_cmd set-ap-password --stdin)
 else
   AP_SHOWN=$(admin_cmd set-ap-password --random --if-default)   # casuale solo alla prima installazione
+fi
+if [ -n "$LED_GPIO" ]; then
+  admin_cmd set "led.gpio=$LED_GPIO" led.enabled=true >/dev/null
+else
+  admin_cmd set led.enabled=false >/dev/null
 fi
 AP_SSID=$(admin_cmd show-config | python3 -c "import json,sys; print(json.load(sys.stdin)['network']['ap_ssid'])")
 systemctl restart seismicpi-netwatch

@@ -12,10 +12,12 @@ TMP = tempfile.mkdtemp(prefix="seismicpi-test-")
 os.environ["SEISMICPI_DATA"] = TMP
 os.environ["SEISMICPI_RUN"] = os.path.join(TMP, "run")
 os.environ["SEISMICPI_RAM"] = os.path.join(TMP, "ram")
+os.environ["SEISMICPI_LED"] = os.path.join(TMP, "led")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from seismicpi import analysis, catalogs, config, dsp, miniseed, pngplot, storage  # noqa: E402
 from seismicpi.acquisition import SampleClock  # noqa: E402
+from seismicpi.led import LedController  # noqa: E402
 
 
 class TestDsp(unittest.TestCase):
@@ -181,6 +183,59 @@ class TestClockAndPng(unittest.TestCase):
         png = pngplot.waveform_png(0, 100, {"E": [math.sin(i / 5) for i in range(1000)], "N": [None] * 1000,
                                             "Z": [0.0] * 1000}, "PROVA 12:00", 3.0, w=300, h=200)
         self.assertTrue(png.startswith(b"\x89PNG\r\n\x1a\n"))
+
+
+class TestLed(unittest.TestCase):
+    """LED su un /sys/class/leds finto: si controllano trigger e luminosità scritti."""
+
+    def setUp(self):
+        import asyncio
+        self.dir = os.environ["SEISMICPI_LED"]
+        os.makedirs(self.dir, exist_ok=True)
+        for f in ("brightness", "trigger"):
+            open(os.path.join(self.dir, f), "w").close()
+        connected = asyncio.Event()
+        acq = type("Acq", (), {"connected": connected})()
+        self.app = {"cfg": config.validate(config.deep_merge(config.DEFAULTS, {})),
+                    "acq": acq, "acq_status": {"sensor_ok": True, "state": "idle", "warmup": 1}}
+        self.connected = connected
+
+    def read(self, name):
+        with open(os.path.join(self.dir, name)) as f:
+            return f.read()
+
+    def run_for(self, led, seconds):
+        import asyncio
+
+        async def go():
+            task = asyncio.ensure_future(led.run())
+            await asyncio.sleep(seconds)
+            task.cancel()
+        asyncio.run(go())
+
+    def test_patterns(self):
+        led = LedController(self.app)
+        self.assertEqual(led.desired(), "error")          # acquisizione non collegata
+        self.connected.set()
+        self.assertEqual(led.desired(), "ok")
+        self.app["acq_status"]["state"] = "active"
+        self.assertEqual(led.desired(), "event")
+        led.flash_alert(5)
+        self.assertEqual(led.desired(), "alert")
+        self.run_for(led, 0.3)
+        self.assertEqual(self.read("trigger"), "none")
+        self.assertIn(self.read("brightness"), ("0", "1"))
+
+    def test_event_steady_and_disk_mode(self):
+        self.connected.set()
+        self.app["acq_status"]["state"] = "active"
+        led = LedController(self.app)
+        self.run_for(led, 0.2)
+        self.assertEqual(self.read("brightness"), "1")
+        self.app["cfg"]["led"]["mode"] = "disk"
+        led2 = LedController(self.app)
+        self.run_for(led2, 0.2)
+        self.assertEqual(self.read("trigger"), "mmc0")
 
 
 if __name__ == "__main__":

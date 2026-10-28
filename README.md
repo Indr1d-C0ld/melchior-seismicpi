@@ -150,6 +150,11 @@ Permette di:
   - allerte di sistema.
 - Regole: classi, intensità e PGA minime, limite orario, ore di silenzio (scavalcabili dalle
   scosse forti), sospensione temporanea.
+- **LED di stato** sul GPIO17, gestito dal kernel (`gpio-led`):
+  - battito lento se tutto è regolare, fisso durante un evento;
+  - lampeggio veloce se il sensore manca, doppio lampo in modalità Access Point;
+  - lampeggio rapidissimo per le scosse forti, anche senza Internet;
+  - in alternativa mostra l'attività della SD.
 - **Webhook** JSON firmato HMAC-SHA256, **MQTT** con autoconfigurazione di **Home Assistant**,
   **uscita GPIO** per cicalino, LED o relè.
 - Coda persistente: senza Internet le notifiche aspettano e partono appena possibile.
@@ -194,7 +199,8 @@ filtrati con il trigger segnato.*
 | Alimentatore 5 V stabile, almeno 2,5 A | la sottotensione corrompe la SD e aggiunge rumore |
 | microSD da 8 GB in su | meglio se di tipo "endurance" |
 | *Facoltativo:* RTC **DS3231** | ora esatta anche senza Internet (stesso bus I2C, `install.sh --rtc`) |
-| *Facoltativo:* cicalino o LED | uscita GPIO per le allerte forti (default GPIO17, pin 11) |
+| LED di stato con resistenza 220-330 Ω | GPIO17 (pin 11) → LED → GND: mostra lo stato a box chiuso ([dettagli](docs/HARDWARE.md#led-di-stato)) |
+| *Facoltativo:* cicalino o relè | uscita GPIO per le allerte forti (default GPIO27, pin 13) |
 
 **Collegamento:**
 
@@ -205,6 +211,7 @@ filtrati con il trigger segnato.*
 | SCL | **5** (GPIO3) |
 | SDA | **3** (GPIO2) |
 | INT | 7 (GPIO4), facoltativo |
+| LED di stato (+, con resistenza) | 11 (GPIO17); il − va su GND (es. pin 20) |
 
 XDA e XCL restano scollegati; AD0 libero o a GND (indirizzo 0x68).
 
@@ -268,6 +275,7 @@ L'installatore:
 | `--ap-password PW` | password dell'Access Point invece di quella casuale |
 | `--hostname NOME` | imposta il nome host |
 | `--country IT` | paese per le regole radio Wi-Fi |
+| `--led-gpio N` | GPIO del LED di stato (default 17); `--no-led` se non c'è |
 | `--rtc` | abilita un modulo RTC DS3231 |
 | `--sim` | prima configurazione con il sensore simulato (demo senza hardware) |
 | `--no-sd-protect` | non applica le protezioni della SD |
@@ -320,7 +328,7 @@ La dashboard è su **`http://seismicpi.local`** oppure sull'indirizzo IP del Pi.
 | **Rilevamento** | parametri STA/LTA, trigger assoluto, durate, pre/post evento, filtri digitali; preimpostazioni (sensibile, bilanciato, robusto, telesismi); STA/LTA in diretta con le soglie |
 | **Sensore** | stato, chip, frequenza misurata, contatori; calibrazione, orientamento, misura del rumore, autotest, scansione I2C, riapertura; configurazione completa e assi |
 | **Stazione e posizione** | nome e codici SEED; coordinate da mappa o dal GPS del telefono; quota; rotazione rispetto al nord; note sul sito; unità e fuso degli orari |
-| **Allerte** | sospensione rapida; Telegram (token, chat autorizzate, verifica, prove); regole; cataloghi; allerte di sistema e riepilogo giornaliero; webhook, MQTT e GPIO; storico e coda delle notifiche |
+| **Allerte** | sospensione rapida; LED di stato (modalità, soglia, prova dei lampeggi); Telegram (token, chat autorizzate, verifica, prove); regole; cataloghi; allerte di sistema e riepilogo giornaliero; webhook, MQTT e GPIO; storico e coda delle notifiche |
 | **Rete** | stato della connessione, indirizzi, segnale; adattatore (driver, USB, supporto AP); reti salvate con priorità; scansione; Access Point (forzatura, nome, password, canale, tempi); cronologia dei cambi |
 | **Sistema** | *Hardware*: SoC, frequenze, tensioni e clock del VideoCore, throttling, RAM, scheda SD, rete, USB, I2C, processi. *Archiviazione*: modalità dei dati grezzi, periodi di conservazione, pulizie manuali. *Servizi*: stato, riavvio, registro e journal. *Accesso*: password, utente, consultazione pubblica in sola lettura, sessioni. *Backup*. *Alimentazione e orologio* |
 | **Guida** | schema di collegamento, montaggio, lettura degli eventi, scala di intensità, accesso, problemi comuni |
@@ -422,8 +430,22 @@ Con l'autoconfigurazione attiva, Home Assistant crea da solo i sensori:
 
 Serve il pacchetto `python3-paho-mqtt`.
 
+### LED di stato
+| Lampeggio | Significato |
+|---|---|
+| breve lampo ogni 2 s | acquisizione regolare |
+| lento regolare | avvio del trigger |
+| acceso fisso | evento in corso |
+| veloce | sensore assente o acquisizione ferma |
+| doppio lampo | modalità Access Point |
+| rapidissimo per 15 s | allerta forte (da MMI III, configurabile) |
+
+Il LED è comandato dal kernel tramite l'overlay `gpio-led`, quindi il lampeggio non costa CPU.
+Dalla dashboard si può scegliere di mostrare invece l'attività della SD o il battito del
+kernel. API: `GET /api/led`, `POST /api/led/test`.
+
 ### GPIO
-Un'uscita digitale (default GPIO17) si attiva per N secondi quando un evento supera l'intensità
+Un'uscita digitale (default GPIO27, pin 13) si attiva per N secondi quando un evento supera l'intensità
 scelta. Usa il comando `pinctrl` di Raspberry Pi OS.
 
 ---
@@ -502,6 +524,7 @@ Se la dashboard si ferma, l'acquisizione continua e le notifiche arretrate parto
 | `seismicpi/catalogs.py` | client FDSN, deduplicazione, associazione |
 | `seismicpi/notify.py`, `pngplot.py` | Telegram, webhook, MQTT, GPIO, grafici PNG |
 | `seismicpi/netmgr.py`, `netwatch.py` | NetworkManager e Access Point |
+| `seismicpi/led.py` | LED di stato (motivi di lampeggio sul LED del kernel `gpio-led`) |
 | `seismicpi/web/` | server aiohttp e dashboard (JavaScript a moduli, nessuna dipendenza) |
 | `seismicpi/admin.py` | comandi da terminale (password, configurazione) |
 
@@ -534,7 +557,7 @@ di scrittura richiedono l'amministratore.
 | Statistiche | `GET /api/stats/{minute,system,noise_profile,events,storage}` |
 | Cataloghi | `GET /api/catalog` · `POST /api/catalog/refresh` |
 | Sensore | `POST /api/sensor/{calibrate,noise,orient,selftest,reopen,inject}` · `POST /api/record` · `GET /api/i2c` |
-| Allerte | `POST /api/alerts/{test,mute,telegram/check,outbox/clear}` · `GET /api/alerts/history` |
+| Allerte | `POST /api/alerts/{test,mute,telegram/check,outbox/clear}` · `GET /api/alerts/history` · `GET /api/led` · `POST /api/led/test` |
 | Rete | `GET /api/network` · `POST /api/network/{scan,add,mode}` · `POST /api/network/{uuid}/{connect,priority}` · `DELETE /api/network/{uuid}` |
 | Sistema | `GET /api/system` · `/hardware` · `/journal` · `/backup` · `GET /api/log` · `POST /api/system/{power,time,restore,purge}` |
 | Tempo reale | `GET /ws` (WebSocket: `status`, `live`, `event`, `minute`, `alert`, `catalog`, `config`) |
@@ -616,6 +639,7 @@ nuovo driver con la stessa interfaccia.
 | Orari sbagliati | orologio non sincronizzato: Internet, ora dal browser o modulo RTC |
 | L'Access Point non parte | Rete → Adattatore: modalità AP non supportata dal driver; `journalctl -u seismicpi-netwatch` |
 | Telegram non risponde | Allerte → Verifica token; serve Internet; chat da autorizzare |
+| Il LED non si accende | Allerte → LED di stato: se risulta "non rilevato" manca l'overlay (rilancia `install.sh` e riavvia); controlla polarità e resistenza |
 | Log | `journalctl -u seismicpi-acq -u seismicpi-web -u seismicpi-netwatch -f`, oppure Sistema → Servizi |
 
 ---
