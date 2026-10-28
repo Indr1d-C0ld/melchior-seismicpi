@@ -256,6 +256,19 @@ Serve **Raspberry Pi OS Lite** (Bookworm o Trixie). Sui modelli Zero e 1 usa la 
 
 4. **Riavvia** il Pi (`sudo reboot`): attiva l'I2C e le protezioni della SD.
 
+> **Il Pi non si collega al Wi-Fi?** Con le immagini recenti (Trixie, cloud-init) capita che
+> la personalizzazione di Imager non venga scritta. Segni tipici: nome host `raspberrypi`, SSH
+> che rifiuta l'accesso, `network-config` e `user-data` con soli commenti. Senza riflashare,
+> inserisci la SD nel PC e lancia:
+>
+> ```bash
+> ./scripts/prepara-sd.sh /media/$USER/bootfs
+> ```
+>
+> Lo script chiede nome host, utente e password, rete Wi-Fi e password, e prepara un primo avvio
+> come quello di Imager. Al boot il Pi applica le impostazioni e si riavvia da solo. Molte
+> chiavette USB (es. TP-Link TL-WN725N) funzionano **solo a 2,4 GHz**.
+
 L'installatore:
 
 1. installa i pacchetti Debian necessari (`python3-aiohttp`, `python3-smbus2`, `i2c-tools`,
@@ -637,6 +650,7 @@ nuovo driver con la stessa interfaccia.
 | Nessun evento | livello di rumore in Statistiche; prova con un colpo vicino al box (deve dare un "impulso") |
 | Buchi o overflow FIFO | CPU satura (resta a 100 Hz), alimentatore debole, SD lenta |
 | Orari sbagliati | orologio non sincronizzato: Internet, ora dal browser o modulo RTC |
+| Il Pi non si collega al Wi-Fi dopo la prima scrittura | personalizzazione di Imager non applicata: `scripts/prepara-sd.sh` sulla SD dal PC; rete a 2,4 GHz per le chiavette USB |
 | L'Access Point non parte | Rete → Adattatore: modalità AP non supportata dal driver; `journalctl -u seismicpi-netwatch` |
 | Telegram non risponde | Allerte → Verifica token; serve Internet; chat da autorizzare |
 | Il LED non si accende | Allerte → LED di stato: se risulta "non rilevato" manca l'overlay (rilancia `install.sh` e riavvia); controlla polarità e resistenza |
