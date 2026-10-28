@@ -14,6 +14,7 @@ import concurrent.futures
 import logging
 import math
 import os
+import shutil
 import signal
 import time
 
@@ -522,6 +523,8 @@ class Acquisition:
             self._close_sensor("riapertura richiesta")
             self.next_open = 0
             return {"ok": True}
+        if cmd == "purge_data":
+            return {"ok": True, **self.purge_data()}
         return {"ok": False, "error": f"comando sconosciuto: {cmd}"}
 
     def status(self) -> dict:
@@ -630,6 +633,42 @@ class Acquisition:
             self.sensor.close()
         await asyncio.sleep(0.5)
         self.dbx.shutdown(wait=True)
+
+    def purge_data(self) -> dict:
+        """Azzera i dati acquisiti che questo processo possiede (raw in RAM e su SD, rullo, buffer
+        in memoria, statistiche non ancora scritte). Eventi e database li azzera il web."""
+        if self.state != "idle":                  # evento in corso: lo si scarta senza salvarlo
+            self.state = "idle"
+            self.acc = None
+            self.manual_until = None
+            for s in self.stalta:
+                s.frozen = False
+        self.block = None
+        self.ring.clear()
+        self.stats_pending = []
+        self._reset_minute()
+        self.minute = None
+        self.counters.clear()
+        self.last_event_id = None
+        removed = {"raw_days": 0, "heli_days": 0}
+        if self.raw:
+            self.raw.close()
+        from .config import RAM_DIR
+        for base in {self.data_dir, RAM_DIR}:
+            arch = storage.RawArchive(base)
+            for d in arch.days():
+                shutil.rmtree(os.path.join(arch.base, d), ignore_errors=True)
+                removed["raw_days"] += 1
+        self.heli.acc_slot = None
+        self.heli.key = None
+        self.heli.buf = None
+        self.heli.dirty = [None] * 4
+        for k in self.heli.days():
+            os.unlink(self.heli.path(k))
+            removed["heli_days"] += 1
+        self._setup_raw()
+        log.warning("dati acquisiti azzerati su richiesta: %s", removed)
+        return removed
 
     def _housekeeping(self):
         st = self.cfg["storage"]

@@ -1,4 +1,4 @@
-import { state, get, post, del, h, card, configForm, fmtDT, fmtAgo, fmtBytes, fmtDur, num, toast, errToast, confirm, download, seg } from '../lib.js';
+import { state, get, post, del, h, card, configForm, modal, fmtDT, fmtAgo, fmtBytes, fmtDur, num, toast, errToast, confirm, download, seg } from '../lib.js';
 
 const kv = (pairs) => h('div', { class: 'kv' }, pairs.filter(Boolean).flatMap(([k, v]) => [h('span', {}, k), h('span', {}, v ?? '–')]));
 const meter = (pct, warn = 75, bad = 90) => h('div', { class: 'meter' }, h('i', { style: { width: Math.min(100, pct || 0) + '%', background: pct >= bad ? 'var(--bad)' : pct >= warn ? 'var(--warn)' : 'var(--accent)' } }));
@@ -74,8 +74,21 @@ export default async function (root) {
           h('li', {}, 'swap su SD disattivato (resta lo zram compresso in RAM, se presente)'), h('li', {}, 'filesystem montato con noatime e commit ogni 120 s'),
           h('li', {}, 'timer apt e man-db giornalieri disattivati'), h('li', {}, 'file di stato e socket in /run (RAM)'),
           h('li', {}, 'dati grezzi in RAM, rullo e statistiche scritti a blocchi'))),
-        card('Pulizia manuale', h('div', { class: 'row' }, purge('raw', 'Elimina dati grezzi', { keep_days: 0 }), purge('events_noise', 'Elimina eventi di rumore non etichettati'),
-          purge('stats', 'Azzera statistiche'), purge('log', 'Svuota registro'))))));
+        card('Pulizia manuale', h('div', {},
+          h('div', { class: 'row' }, purge('raw', 'Elimina dati grezzi', { keep_days: 0 }), purge('events_noise', 'Elimina eventi di rumore non etichettati'),
+            purge('stats', 'Azzera statistiche'), purge('log', 'Svuota registro')),
+          h('div', { class: 'note warn', style: { marginTop: '12px' } },
+            h('b', {}, 'Azzera tutti i dati acquisiti. '),
+            'Elimina eventi e forme d\'onda, rullo, dati grezzi, statistiche, telemetria, registro e coda delle notifiche: utile dopo la fase di installazione e prova. Restano configurazione, password, sessioni, reti Wi-Fi e cataloghi ufficiali.',
+            h('div', { class: 'row', style: { marginTop: '8px' } }, h('button', { class: 'danger', disabled: !state.admin, onclick: async () => {
+              const inp = h('input', { placeholder: 'AZZERA' });
+              const ok = await modal('Azzerare tutti i dati acquisiti?', h('div', { class: 'stack' },
+                h('p', {}, 'Tutti gli eventi, il rullo, i dati grezzi e le statistiche verranno eliminati definitivamente. Per confermare scrivi AZZERA.'), inp),
+                [{ label: 'Annulla', value: false }, { label: 'Elimina tutto', class: 'danger', value: true }]);
+              if (!ok) return;
+              if (inp.value.trim() !== 'AZZERA') { toast('Conferma non corretta: nulla è stato eliminato', 'warn'); return; }
+              try { const r = await post('/api/system/purge', { what: 'all', confirm: 'AZZERA' }); toast(`Eliminati: ${r.removed.join(', ')}`, 'ok', 8000); render(); } catch (e) { errToast(e); }
+            } }, 'Azzera tutti i dati acquisiti'))))))));
   }
 
   async function svc() {

@@ -20,7 +20,9 @@ export default async function (root) {
     ['Modalità del driver', (ad.modes || []).join(', ')],
   ]);
   const errs = [info.error && h('div', { class: 'note bad' }, `NetworkManager: ${info.error}`), s.error && h('div', { class: 'note warn' }, s.error),
-    ad.ap_supported === false && h('div', { class: 'note bad' }, 'Il driver di questo adattatore non supporta la modalità Access Point: il fallback non può funzionare. Serve un adattatore con chip compatibile (es. RTL8188EUS con driver aggiornato, MT7601U, RT5370).')].filter(Boolean);
+    ad.ap_supported === false && h('div', { class: 'note warn' }, `Il driver ${ad.driver || ''} di questo adattatore non supporta la modalità Access Point: il Pi non può creare la propria rete di emergenza e resta sulle sole reti note. Soluzione gratuita: aggiungi l'hotspot del telefono come rete di riserva (qui sotto). In alternativa serve una chiavetta con chip compatibile (es. RT5370, MT7610U) o un Pi con Wi-Fi integrato.`),
+    s.ap_available === false && ad.ap_supported !== false && s.ap_unavailable_reason && h('div', { class: 'note warn' }, `Access Point non disponibile: ${s.ap_unavailable_reason}.`)].filter(Boolean);
+  const apOk = ad.ap_supported !== false;
 
   const savedEl = h('div');
   const renderSaved = () => {
@@ -37,10 +39,10 @@ export default async function (root) {
       }))) : h('div', { class: 'note warn' }, 'Nessuna rete salvata: al prossimo avvio partirà l\'Access Point.'));
   };
   renderSaved();
-  const addDialog = async (ssid = '') => {
+  const addDialog = async (ssid = '', priority = 10, title = 'Aggiungi rete Wi-Fi') => {
     const ss = h('input', { value: ssid, placeholder: 'nome rete (SSID)' }), pw = h('input', { type: 'password', placeholder: 'password (vuota se aperta)' });
-    const pr = h('input', { type: 'number', value: 10 }), hid = h('input', { type: 'checkbox' });
-    await modal('Aggiungi rete Wi-Fi', h('div', { class: 'form' }, h('label', { class: 'field' }, h('span', {}, 'SSID'), ss), h('label', { class: 'field' }, h('span', {}, 'Password'), pw),
+    const pr = h('input', { type: 'number', value: priority }), hid = h('input', { type: 'checkbox' });
+    await modal(title, h('div', { class: 'form' }, h('label', { class: 'field' }, h('span', {}, 'SSID'), ss), h('label', { class: 'field' }, h('span', {}, 'Password'), pw),
       h('label', { class: 'field' }, h('span', {}, 'Priorità (più alta = preferita)'), pr), h('label', { class: 'field check' }, hid, h('span', {}, 'rete nascosta'))), [
       { label: 'Annulla', value: null },
       { label: 'Salva', class: 'primary', handler: async () => { await post('/api/network/add', { ssid: ss.value, password: pw.value, priority: +pr.value, hidden: hid.checked }); toast('Rete salvata', 'ok'); setTimeout(() => location.reload(), 500); } }]);
@@ -56,7 +58,7 @@ export default async function (root) {
     } catch (e) { scanEl.replaceChildren(h('div', { class: 'note warn' }, e.message)); } finally { scanBtn.disabled = false; }
   } }, 'Cerca reti');
   const forceSeg = h('div', { class: 'row' }, ...[['auto', 'Automatico'], ['ap', 'Forza Access Point'], ['client', 'Disattiva Access Point']].map(([m, l]) =>
-    h('button', { class: info.force === m ? 'small primary' : 'small', disabled: !state.admin, onclick: async () => {
+    h('button', { class: info.force === m ? 'small primary' : 'small', disabled: !state.admin || (m === 'ap' && !apOk), onclick: async () => {
       if (m === 'ap' && !await confirm('Forzare l\'Access Point?', `Il Pi lascerà la rete attuale e creerà la rete "${state.cfg.network.ap_ssid}". Per tornare alla dashboard collegati a quella rete e apri http://${state.cfg.network.ap_address}.`, 'Procedi')) return;
       await post('/api/network/mode', { mode: m }); toast('Impostazione applicata entro 30 secondi', 'ok'); setTimeout(() => location.reload(), 1500);
     } }, l)));
@@ -71,12 +73,21 @@ export default async function (root) {
     { path: 'network.keep_ap_with_clients', label: 'Non interrompere l\'AP se qualcuno è collegato', type: 'check' },
     { path: 'network.interface', label: 'Interfaccia Wi-Fi' },
   ];
+  // rete di riserva: l'hotspot del telefono salvato con priorità bassa
+  const lowest = Math.min(10, ...info.saved.filter((n) => !n.is_ap).map((n) => n.priority));
+  const backup = card('Rete di riserva: hotspot del telefono', h('div', { class: 'stack' },
+    h('div', { class: 'muted' }, 'Se il Pi non trova più la rete di casa (router nuovo, password cambiata, trasloco), attiva l\'hotspot del telefono: il Pi ci si collega da solo e dal telefono apri la dashboard (http://' + info.hostname + '.local o l\'indirizzo che il telefono mostra tra i dispositivi collegati) per aggiungere la nuova rete. Funziona con qualsiasi adattatore, anche senza modalità Access Point.'),
+    h('ul', { class: 'muted' },
+      h('li', {}, 'usa la banda a 2,4 GHz e la sicurezza WPA2 (molte chiavette USB non vedono il 5 GHz né il solo WPA3);'),
+      h('li', {}, 'viene salvata con priorità più bassa della rete di casa (NetworkManager accetta anche valori negativi), così il Pi la usa solo quando serve.')),
+    h('div', { class: 'row' }, h('button', { class: apOk ? 'small' : 'small primary', disabled: !state.admin, onclick: () => addDialog('', lowest - 5, 'Aggiungi l\'hotspot del telefono') }, '+ Aggiungi hotspot del telefono'))));
   root.append(h('div', { class: 'stack' }, ...errs,
     h('div', { class: 'grid g2' }, card('Stato della rete', status), card('Adattatore Wi-Fi', adapter)),
     h('div', { class: 'grid g2' },
       card('Reti Wi-Fi conosciute', h('div', { class: 'stack' }, savedEl, h('div', { class: 'row' }, h('button', { class: 'small primary', disabled: !state.admin, onclick: () => addDialog() }, '+ Aggiungi rete'), scanBtn), scanEl)),
-      card('Access Point di emergenza', h('div', { class: 'stack' }, forceSeg,
+      apOk ? card('Access Point di emergenza', h('div', { class: 'stack' }, forceSeg,
         h('div', { class: 'muted' }, 'Se all\'avvio nessuna rete nota risponde entro il tempo di attesa, il Pi crea una propria rete Wi-Fi. Collegati e apri la dashboard all\'indirizzo indicato: da qui puoi aggiungere la nuova rete di casa.'),
-        configForm(apFields)))),
+        configForm(apFields))) : backup),
+    apOk ? backup : null,
     s.history?.length ? card('Cambi di modalità recenti', h('table', {}, h('tbody', {}, s.history.slice().reverse().map((x) => h('tr', {}, h('td', {}, fmtDT(x.t)), h('td', {}, `${x.from} → ${x.to}`), h('td', { class: 'wrap' }, x.why)))))) : null));
 }

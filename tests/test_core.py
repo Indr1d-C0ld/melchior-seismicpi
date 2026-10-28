@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from seismicpi import analysis, catalogs, config, dsp, miniseed, pngplot, storage  # noqa: E402
 from seismicpi.acquisition import SampleClock  # noqa: E402
 from seismicpi.led import LedController  # noqa: E402
+from seismicpi import netmgr, netwatch  # noqa: E402
 
 
 class TestDsp(unittest.TestCase):
@@ -236,6 +237,77 @@ class TestLed(unittest.TestCase):
         led2 = LedController(self.app)
         self.run_for(led2, 0.2)
         self.assertEqual(self.read("trigger"), "mmc0")
+
+
+class TestNetWatch(unittest.TestCase):
+    """Guardiano di rete con NetworkManager simulato (nessun comando reale)."""
+
+    def setUp(self):
+        self.calls = []
+        self.state = {"connected": False, "ap": False, "ap_supported": False, "ap_fail": False}
+        st = self.state
+
+        def device(iface):
+            if st["connected"]:
+                return {"device": iface, "state": "connected", "connection": "casa"}
+            if st["ap"]:
+                return {"device": iface, "state": "connected", "connection": netmgr.AP_CON}
+            return {"device": iface, "state": "disconnected", "connection": None}
+
+        def ap_up(cfg):
+            self.calls.append("ap_up")
+            if st["ap_fail"]:
+                raise netmgr.NetError("driver: operazione non supportata")
+            st["ap"] = True
+
+        self.patches = {
+            "device": device, "ap_up": ap_up, "ap_active": lambda i: st["ap"],
+            "adapter_info": lambda i: {"present": True, "driver": "rtl8xxxu", "ap_supported": st["ap_supported"]},
+            "reconnect": lambda i: self.calls.append("reconnect"), "get_force": lambda: "auto",
+            "known_client_profiles": lambda: [{"name": "casa"}], "ap_down": lambda: None, "ensure_ap": lambda c: None,
+        }
+        self.saved = {k: getattr(netmgr, k) for k in self.patches}
+        for k, v in self.patches.items():
+            setattr(netmgr, k, v)
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(netmgr, k, v)
+
+    def make(self):
+        nw = netwatch.NetWatch()
+        nw.check_adapter(force=True)
+        nw.boot -= 10_000                      # avvio "vecchio": niente attesa iniziale lunga
+        nw.disconnected_since = time.monotonic() - 10_000
+        nw.last_retry = time.monotonic() - 10_000
+        return nw
+
+    def test_no_ap_when_unsupported(self):
+        nw = self.make()
+        nw.tick()
+        self.assertNotIn("ap_up", self.calls)
+        self.assertIn("reconnect", self.calls)          # sollecita NetworkManager sulle reti note
+        self.assertEqual(nw.mode, "offline")
+        ok, why = nw.ap_available()
+        self.assertFalse(ok)
+        self.assertIn("rtl8xxxu", why)
+
+    def test_ap_backoff_after_failures(self):
+        self.state.update(ap_supported=None, ap_fail=True)
+        nw = self.make()
+        for _ in range(netwatch.AP_MAX_FAILURES + 2):
+            nw.tick()
+        self.assertEqual(self.calls.count("ap_up"), netwatch.AP_MAX_FAILURES)   # poi smette
+        self.assertFalse(nw.ap_available()[0])
+
+    def test_ap_started_when_supported(self):
+        self.state.update(ap_supported=True)
+        nw = self.make()
+        nw.tick()
+        self.assertEqual(nw.mode, "ap")
+        self.state.update(connected=True, ap=False)
+        nw.tick()
+        self.assertEqual(nw.mode, "client")
 
 
 if __name__ == "__main__":

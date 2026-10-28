@@ -1028,6 +1028,10 @@ async def network_mode(request):
     mode = b.get("mode", "auto")
     if mode not in ("auto", "ap", "client"):
         return err("modalità non valida")
+    if mode == "ap":
+        ad = await _net(netmgr.adapter_info, request.app["cfg"]["network"]["interface"])
+        if ad.get("ap_supported") is False:
+            return err(f"l'adattatore Wi-Fi (driver {ad.get('driver') or '?'}) non supporta la modalità Access Point")
     netmgr.set_force(mode)
     return J({"ok": True, "note": "il cambio avviene entro il prossimo controllo del guardiano di rete"})
 
@@ -1203,6 +1207,33 @@ async def system_purge(request):
     elif what == "log":
         app["db"].execute("DELETE FROM log")
         removed = ["registro"]
+    elif what == "all":
+        # tutti i dati acquisiti; restano configurazione, password, sessioni, reti e cataloghi ufficiali
+        if b.get("confirm") != "AZZERA":
+            return err("conferma mancante")
+        try:
+            r = await app["acq"].call("purge_data", timeout=60)
+            g = lambda k: f"{r.get(k, 0)} {'giorno' if r.get(k, 0) == 1 else 'giorni'}"   # noqa: E731
+            acq_note = f"{g('raw_days')} di dati grezzi, {g('heli_days')} di rullo"
+        except (ConnectionError, asyncio.TimeoutError):
+            return err("il servizio di acquisizione non risponde: riprova tra poco")
+        con = app["db"]
+        n_ev = con.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        for (eid,) in con.execute("SELECT id FROM events").fetchall():
+            app["events"].delete(eid)
+        for table in ("events", "stats_minute", "sys_stats", "log", "outbox"):
+            con.execute(f"DELETE FROM {table}")
+        con.execute("UPDATE catalog SET local_event = NULL")
+        con.execute("DELETE FROM sqlite_sequence WHERE name = 'events'") if con.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'").fetchone() else None
+        def compact():
+            c = db.connect()
+            c.execute("VACUUM")
+            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            c.close()
+        await asyncio.get_running_loop().run_in_executor(None, compact)
+        removed = [f"{n_ev} eventi con le forme d'onda", acq_note, "statistiche", "telemetria", "registro",
+                   "coda delle notifiche"]
     else:
         return err("operazione sconosciuta")
     db.log(app["db"], "warning", "archivio", f"pulizia manuale: {what}")

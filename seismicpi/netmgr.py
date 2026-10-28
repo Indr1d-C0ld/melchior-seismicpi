@@ -158,6 +158,12 @@ def connect(uuid: str) -> None:
     _run(["nmcli", "connection", "up", "uuid", uuid], timeout=60)
 
 
+def reconnect(iface: str) -> None:
+    """Chiede a NetworkManager di collegare l'interfaccia alla migliore rete nota disponibile
+    (azzera anche il limite di tentativi automatici che NM applica dopo alcuni fallimenti)."""
+    _run(["nmcli", "device", "connect", iface], timeout=60, check=False)
+
+
 def ensure_ap(ncfg: dict) -> None:
     """Crea o aggiorna il profilo dell'Access Point (non si attiva da solo: autoconnect=no)."""
     iface = ncfg["interface"]

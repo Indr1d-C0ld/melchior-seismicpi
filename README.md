@@ -133,6 +133,7 @@ Permette di:
   stazione con mappa, allerte, rete, archiviazione, accesso.
 - **Sistema:**
   - hardware (tensioni, clock VideoCore, throttling, scheda SD, USB, processi);
+  - azzeramento completo dei dati acquisiti, con conferma (resta la configurazione);
   - servizi e journal;
   - sessioni, backup e ripristino;
   - riavvio e spegnimento;
@@ -298,8 +299,14 @@ L'installatore:
 Per un'installazione senza domande:
 `SEISMICPI_ADMIN_PASSWORD=... sudo -E ./install.sh`.
 
-Per **aggiornare** rilancia `install.sh`: codice e servizi vengono aggiornati, dati e
-configurazione restano.
+Per **aggiornare** all'ultima versione del repository, dal Pi:
+
+```bash
+cd ~/seismicpi && git pull && sudo ./install.sh
+```
+
+Codice e servizi vengono aggiornati; dati, configurazione, password della dashboard e
+dell'Access Point restano.
 
 La dashboard è su **`http://seismicpi.local`** oppure sull'indirizzo IP del Pi.
 
@@ -481,7 +488,15 @@ browser (Sistema → Alimentazione e orologio) oppure con un modulo RTC.
 
 > L'Access Point richiede un adattatore il cui driver supporti la modalità AP. La pagina
 > **Rete → Adattatore** lo verifica. Il Wi-Fi integrato dei Raspberry (brcmfmac) la supporta;
-> per le chiavette USB dipende dal chip e dal driver.
+> per le chiavette USB dipende dal chip e dal driver. Per esempio il TP-Link TL-WN725N
+> (RTL8188EUS, driver `rtl8xxxu`) non la supporta.
+
+**Se l'adattatore non supporta l'Access Point**, il guardiano non insiste. Non prova ad accenderlo,
+oppure lo sospende dopo 3 errori con attese crescenti fino a 6 ore, e ogni 5 minuti chiede a
+NetworkManager di ricollegarsi alle reti note. La soluzione gratuita è una **rete di riserva**:
+in *Rete → Rete di riserva* salvi l'hotspot del telefono (2,4 GHz, WPA2) con priorità più bassa
+di quella di casa. Quando il Pi non trova più la rete di casa, attivi l'hotspot, il Pi ci si
+collega e dal telefono apri la dashboard per aggiungere la nuova rete.
 
 ---
 
@@ -651,7 +666,8 @@ nuovo driver con la stessa interfaccia.
 | Buchi o overflow FIFO | CPU satura (resta a 100 Hz), alimentatore debole, SD lenta |
 | Orari sbagliati | orologio non sincronizzato: Internet, ora dal browser o modulo RTC |
 | Il Pi non si collega al Wi-Fi dopo la prima scrittura | personalizzazione di Imager non applicata: `scripts/prepara-sd.sh` sulla SD dal PC; rete a 2,4 GHz per le chiavette USB |
-| L'Access Point non parte | Rete → Adattatore: modalità AP non supportata dal driver; `journalctl -u seismicpi-netwatch` |
+| L'Access Point non parte | Rete → Adattatore: modalità AP non supportata dal driver; usa la rete di riserva (hotspot del telefono); `journalctl -u seismicpi-netwatch` |
+| Ripartire da zero dopo le prove | Sistema → Archiviazione e SD → **Azzera tutti i dati acquisiti** (scrivi AZZERA per confermare) |
 | Telegram non risponde | Allerte → Verifica token; serve Internet; chat da autorizzare |
 | Il LED non si accende | Allerte → LED di stato: se risulta "non rilevato" manca l'overlay (rilancia `install.sh` e riavvia); controlla polarità e resistenza |
 | Log | `journalctl -u seismicpi-acq -u seismicpi-web -u seismicpi-netwatch -f`, oppure Sistema → Servizi |
